@@ -101,6 +101,10 @@ public struct GatewayAuthBootstrap: Sendable {
     guard binding.provider == "gcloud" else { throw GatewayAuthError("Stored provider is unsupported") }
     let gcloudEnvironment = isolatedEnvironment(prepared, directory: directory)
     if auth && arguments[1] == "revoke" {
+      guard options.profile != nil else { throw GatewayAuthError("auth revoke requires an explicit --credential or --profile") }
+      if [.gmail, .docs, .sheets, .drive, .ocr].contains(product), options.confirmation != profile {
+        throw GatewayAuthError("auth revoke requires an exact --confirm-credential")
+      }
       // Never revoke credentials in the user's normal gcloud configuration.
       let result = try runner.run(arguments: ["auth", "application-default", "revoke", "--quiet"],
                                   environment: gcloudEnvironment, interactive: false, timeout: 30)
@@ -145,6 +149,7 @@ private struct ProviderOptions {
   var profile: String?
   var account: String?
   var serviceProduct: String?
+  var confirmation: String?
   var scopes: [String] = []
   var noOpen = false
   var timeout: TimeInterval = 300
@@ -155,7 +160,7 @@ private struct ProviderOptions {
       let argument = arguments[index]
       let fields = argument.split(separator: "=", maxSplits: 1).map(String.init)
       let name = fields[0]
-      if ["--provider", "--credential", "--profile", "--oauth-profile", "--account", "--scope", "--timeout", "--product"].contains(name) {
+      if ["--provider", "--credential", "--profile", "--oauth-profile", "--account", "--scope", "--timeout", "--product", "--confirm-credential"].contains(name) {
         let value: String
         if fields.count == 2 { value = fields[1] } else {
           index += 1
@@ -172,6 +177,7 @@ private struct ProviderOptions {
             throw GatewayAuthError("--account must be an email address")
           }
           account = value
+        case "--confirm-credential": confirmation = value
         case "--product": serviceProduct = value
         case "--scope": scopes.append(value)
         case "--timeout":

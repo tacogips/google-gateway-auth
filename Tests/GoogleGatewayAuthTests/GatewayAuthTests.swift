@@ -126,7 +126,7 @@ private func withEnvironment(_ operation: ([String: String]) throws -> Void) thr
   try withEnvironment { environment in
     let runner = RecordingGcloud(); let auth = GatewayAuthBootstrap(runner: runner)
     _ = try auth.prepare(arguments: ["auth", "login", "--provider", "gcloud"], environment: environment, product: .ocr, role: "writer")
-    let result = try auth.prepare(arguments: ["auth", "revoke"], environment: environment, product: .ocr, role: "writer")
+    let result = try auth.prepare(arguments: ["auth", "revoke", "--credential", "google-personal", "--confirm-credential", "google-personal"], environment: environment, product: .ocr, role: "writer")
     guard case .handled(let output) = result else { Issue.record("Revoke unhandled"); return }
     #expect(output.contains("REVOKED")); #expect(runner.calls.last?.arguments == ["auth", "application-default", "revoke", "--quiet"])
     #expect(runner.calls.last?.environment["CLOUDSDK_CONFIG"]?.contains("google-document-ocr-gateway/providers/writer/google-personal") == true)
@@ -196,5 +196,19 @@ private func withEnvironment(_ operation: ([String: String]) throws -> Void) thr
     try privateWrite(Data("#!/bin/sh\nsleep 5\n".utf8), to: script)
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
     #expect(throws: GatewayAuthError.self) { try GcloudProcess().run(arguments: [], environment: env, interactive: false, timeout: 0.1) }
+  }
+}
+
+
+@Test func revokePreservesExistingExplicitSelectionAndConfirmationChecks() throws {
+  try withEnvironment { environment in
+    var configured = environment
+    configured["GMAIL_GATEWAY_OAUTH_CLIENT_JSON"] = #"{"installed":{"client_id":"test-client"}}"#
+    let runner = RecordingGcloud(); let auth = GatewayAuthBootstrap(runner: runner)
+    _ = try auth.prepare(arguments: ["auth", "login", "--provider", "gcloud"], environment: configured, product: .gmail, role: "reader")
+    for arguments in [["auth", "revoke"], ["auth", "revoke", "--credential", "gmail-personal", "--confirm-credential", "wrong"]] {
+      #expect(throws: GatewayAuthError.self) { try auth.prepare(arguments: arguments, environment: configured, product: .gmail, role: "reader") }
+    }
+    #expect(runner.calls.count == 2)
   }
 }
