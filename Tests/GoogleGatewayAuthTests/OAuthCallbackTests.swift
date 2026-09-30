@@ -88,3 +88,18 @@ private func completeCallback() async throws -> Int {
     #expect(try privateRead(configDirectory(environment: environment, product: product).appendingPathComponent("oauth-client.json")) == fixture)
   }
 }
+
+@Test(arguments: ["/wrong?state=state&code=fixture", "/oauth/callback?state=wrong&code=fixture",
+  "/oauth/callback?state=state&state=other&code=fixture", "/oauth/callback?state=state&code=fixture&error=access_denied"])
+func callbackRejectsInvalidRequestThenAcceptsValidCallback(_ target: String) async throws {
+  let settings = try OAuthCallbackSettings(prefix: "TEST_", environment: [:])
+  let server = try OAuthCallbackServer(settings: settings)
+  let received = Task.detached { try server.wait(expectedState: "state", timeout: 3) }
+  let port = try #require(server.listenerURI.port)
+  let invalid = try #require(URL(string: "http://127.0.0.1:\(port)\(target)"))
+  let (_, rejected) = try await URLSession.shared.data(from: invalid)
+  #expect((rejected as? HTTPURLResponse)?.statusCode == 400)
+  let valid = try #require(URL(string: "http://127.0.0.1:\(port)/oauth/callback?state=state&code=fixture"))
+  _ = try await URLSession.shared.data(from: valid)
+  #expect(try await received.value.code == "fixture")
+}

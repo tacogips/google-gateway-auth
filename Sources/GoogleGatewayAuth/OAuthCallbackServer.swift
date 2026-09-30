@@ -83,54 +83,68 @@ public final class OAuthCallbackServer: @unchecked Sendable {
 
   public func wait(expectedState: String, timeout: TimeInterval) throws -> OAuthCallback {
     guard timeout.isFinite, timeout > 0, timeout <= 3600 else { throw GatewayAuthError("Invalid OAuth timeout") }
-    let descriptor = descriptor
-    let callbackPath = callbackPath
-    do {
-      let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    var rejected = 0
+    while rejected < 32 {
       try waitForCallbackData(descriptor: descriptor, deadline: deadline)
       let connection = accept(descriptor, nil, nil)
-      guard connection >= 0 else {
-        throw GatewayAuthError("OAuth callback could not be accepted")
-      }
+      guard connection >= 0 else { throw GatewayAuthError("OAuth callback could not be accepted", kind: .transport) }
       defer { close(connection) }
-      let request = try readCallbackRequest(connection: connection, deadline: deadline)
-      guard let firstLine = request.split(separator: "\r\n", maxSplits: 1).first else {
-        throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
+      do {
+        let callback = try parseCallback(connection: connection,
+          deadline: min(deadline, ProcessInfo.processInfo.systemUptime + 2),
+          expectedState: expectedState, callbackPath: callbackPath)
+        sendCallbackResponse(connection: connection, accepted: true)
+        return callback
+      } catch let error as GatewayAuthError where error.kind == .callback || error.kind == .timeout {
+        rejected += 1
+        sendCallbackResponse(connection: connection, accepted: false)
       }
-      let parts = firstLine.split(separator: " ")
-      guard parts.count == 3, parts[0] == "GET", parts[2] == "HTTP/1.1" || parts[2] == "HTTP/1.0",
-        let components = URLComponents(string: "http://127.0.0.1\(parts[1])")
-      else {
-        throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
-      }
-      guard components.path == callbackPath else {
-        throw GatewayAuthError("OAuth callback path was invalid", kind: .callback)
-      }
-      var query: [String: String] = [:]
-      for item in components.queryItems ?? [] {
-        guard query[item.name] == nil else {
-          throw GatewayAuthError("OAuth callback contained duplicate parameters", kind: .callback)
-        }
-        query[item.name] = item.value ?? ""
-      }
-      guard query["state"] == expectedState, query["error"] != nil || !(query["code"] ?? "").isEmpty else {
-        throw GatewayAuthError("OAuth callback state or code is invalid", kind: .callback)
-      }
-      let html =
-        "<html><body><h1>Authorization received</h1><p>You can close this window.</p></body></html>"
-      let response =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(html.utf8.count)\r\nConnection: close\r\n\r\n\(html)"
-      #if canImport(Darwin)
-        var suppressPipeSignal: Int32 = 1
-        setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &suppressPipeSignal, socklen_t(MemoryLayout<Int32>.size))
-        let sendFlags: Int32 = 0
-      #else
-        let sendFlags = Int32(MSG_NOSIGNAL)
-      #endif
-      _ = response.withCString { send(connection, $0, strlen($0), sendFlags) }
-      return OAuthCallback(code: query["code"], state: query["state"], error: query["error"])
     }
+    throw GatewayAuthError("Too many invalid OAuth callback requests", kind: .callback)
   }
+
+}
+
+private func parseCallback(connection: Int32, deadline: TimeInterval, expectedState: String, callbackPath: String) throws -> OAuthCallback {
+  let request = try readCallbackRequest(connection: connection, deadline: deadline)
+  guard let firstLine = request.split(separator: "\r\n", maxSplits: 1).first else {
+    throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
+  }
+  let parts = firstLine.split(separator: " ")
+  guard parts.count == 3, parts[0] == "GET", parts[2] == "HTTP/1.1" || parts[2] == "HTTP/1.0",
+    let components = URLComponents(string: "http://127.0.0.1\(parts[1])")
+  else {
+    throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
+  }
+  guard components.path == callbackPath else {
+    throw GatewayAuthError("OAuth callback path was invalid", kind: .callback)
+  }
+  var query: [String: String] = [:]
+  for item in components.queryItems ?? [] {
+    guard query[item.name] == nil else {
+      throw GatewayAuthError("OAuth callback contained duplicate parameters", kind: .callback)
+    }
+    query[item.name] = item.value ?? ""
+  }
+  guard query["state"] == expectedState, (query["error"] == nil) != (query["code"] == nil), !(query["code"] ?? query["error"] ?? "").isEmpty else {
+    throw GatewayAuthError("OAuth callback state or code is invalid", kind: .callback)
+  }
+  return OAuthCallback(code: query["code"], state: query["state"], error: query["error"])
+}
+
+private func sendCallbackResponse(connection: Int32, accepted: Bool) {
+  let status = accepted ? "200 OK" : "400 Bad Request"
+  let body = accepted ? "Authorization received. You can close this window." : "Invalid callback. Return to the authorization page."
+  let response = "HTTP/1.1 \(status)\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+  #if canImport(Darwin)
+    var suppressPipeSignal: Int32 = 1
+    setsockopt(connection, SOL_SOCKET, SO_NOSIGPIPE, &suppressPipeSignal, socklen_t(MemoryLayout<Int32>.size))
+    let sendFlags = Int32(MSG_DONTWAIT)
+  #else
+    let sendFlags = Int32(MSG_NOSIGNAL | MSG_DONTWAIT)
+  #endif
+  _ = response.withCString { send(connection, $0, strlen($0), sendFlags) }
 }
 
 private func waitForCallbackData(descriptor: Int32, deadline: TimeInterval) throws {
