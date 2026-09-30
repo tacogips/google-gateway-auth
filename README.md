@@ -35,3 +35,22 @@ swift build
 swift test
 swiftlint lint
 ```
+
+## Configurable OAuth callbacks
+
+Each product uses its own prefix with the same suffixes:
+`OAUTH_REDIRECT_URI`, `OAUTH_LISTEN_HOST`, and `OAUTH_LISTEN_PORT`.
+The public callback URI is separate from the local HTTP listener, allowing an
+HTTPS reverse proxy to forward to a private listener. The default listener is
+127.0.0.1 on an available port; port 0 selects an available port. IPv6 loopback
+is supported. Public HTTP redirects are rejected. Web clients require an exact
+registered callback URI; Desktop clients use HTTP loopback callbacks.
+
+Service CLI composition roots handle `clients register --file ABSOLUTE_PATH
+--product PRODUCT [--redirect-uri URI] [--listen-host ADDRESS] [--listen-port
+PORT] [--replace]`. This privately imports an existing Google client and callback
+settings for that product. It does not create a client in Google Cloud. Existing
+configuration requires `--replace`. Environment values override stored settings.
+
+The callback listener validates path, state and duplicate query parameters, has
+bounded request size and a deadline, and closes when the authorization flow ends.

@@ -41,6 +41,12 @@ public struct GatewayAuthBootstrap: Sendable {
   public func prepare(
     arguments: [String], environment: [String: String], product: GatewayAuthProduct, role: String
   ) throws -> GatewayPreparation {
+    if product == .service, arguments.prefix(2) == ["clients", "register"] {
+      if arguments.contains("--help") {
+        return .handled("Usage: clients register --file ABSOLUTE_PATH [--product calendar|gmail|docs|sheets|drive|analytics|marketing|ocr|service] [--redirect-uri URI] [--listen-host ADDRESS] [--listen-port PORT] [--replace]\nImports an existing Google OAuth client locally; does not create a Google Cloud OAuth client.")
+      }
+      return .handled(try OAuthClientRegistration.run(arguments: arguments, environment: environment))
+    }
     if arguments.contains(where: { $0 == "--provider" || $0.hasPrefix("--provider=") }), arguments.contains("--help") || arguments.contains("-h") {
       return .handled("Usage: auth login --provider gcloud [--credential ID | --profile ID] [--account EMAIL] [--scope URI ...] [--no-open] [--timeout SECONDS]")
     }
