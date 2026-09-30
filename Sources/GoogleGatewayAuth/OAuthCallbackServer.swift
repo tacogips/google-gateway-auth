@@ -15,6 +15,7 @@ public final class OAuthCallbackServer: @unchecked Sendable {
   private let descriptor: Int32
   private let callbackPath: String
   public let redirectURI: URL
+  public let listenerURI: URL
 
   public init(settings: OAuthCallbackSettings) throws {
     #if canImport(Darwin)
@@ -73,6 +74,7 @@ public final class OAuthCallbackServer: @unchecked Sendable {
       throw GatewayAuthError("could not determine OAuth callback port")
     }
     self.descriptor = descriptor
+    listenerURI = redirect
     redirectURI = settings.redirectURI ?? redirect
     callbackPath = settings.callbackPath
   }
@@ -93,26 +95,26 @@ public final class OAuthCallbackServer: @unchecked Sendable {
       defer { close(connection) }
       let request = try readCallbackRequest(connection: connection, deadline: deadline)
       guard let firstLine = request.split(separator: "\r\n", maxSplits: 1).first else {
-        throw GatewayAuthError("OAuth callback request was malformed")
+        throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
       }
       let parts = firstLine.split(separator: " ")
       guard parts.count == 3, parts[0] == "GET", parts[2] == "HTTP/1.1" || parts[2] == "HTTP/1.0",
         let components = URLComponents(string: "http://127.0.0.1\(parts[1])")
       else {
-        throw GatewayAuthError("OAuth callback request was malformed")
+        throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
       }
       guard components.path == callbackPath else {
-        throw GatewayAuthError("OAuth callback path was invalid")
+        throw GatewayAuthError("OAuth callback path was invalid", kind: .callback)
       }
       var query: [String: String] = [:]
       for item in components.queryItems ?? [] {
         guard query[item.name] == nil else {
-          throw GatewayAuthError("OAuth callback contained duplicate parameters")
+          throw GatewayAuthError("OAuth callback contained duplicate parameters", kind: .callback)
         }
         query[item.name] = item.value ?? ""
       }
       guard query["state"] == expectedState, query["error"] != nil || !(query["code"] ?? "").isEmpty else {
-        throw GatewayAuthError("OAuth callback state or code is invalid")
+        throw GatewayAuthError("OAuth callback state or code is invalid", kind: .callback)
       }
       let html =
         "<html><body><h1>Authorization received</h1><p>You can close this window.</p></body></html>"
@@ -134,12 +136,12 @@ public final class OAuthCallbackServer: @unchecked Sendable {
 private func waitForCallbackData(descriptor: Int32, deadline: TimeInterval) throws {
   let remaining = deadline - ProcessInfo.processInfo.systemUptime
   guard remaining > 0 else {
-    throw GatewayAuthError("OAuth callback timed out")
+    throw GatewayAuthError("OAuth callback timed out", kind: .timeout)
   }
   var item = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
   let milliseconds = Int32(min(ceil(remaining * 1_000), Double(Int32.max)))
   guard poll(&item, 1, milliseconds) > 0 else {
-    throw GatewayAuthError("OAuth callback timed out")
+    throw GatewayAuthError("OAuth callback timed out", kind: .timeout)
   }
 }
 
@@ -151,15 +153,15 @@ private func readCallbackRequest(connection: Int32, deadline: TimeInterval) thro
     var buffer = [UInt8](repeating: 0, count: min(4_096, maximumBytes - request.count))
     let count = recv(connection, &buffer, buffer.count, 0)
     guard count > 0 else {
-      throw GatewayAuthError("OAuth callback request was incomplete")
+      throw GatewayAuthError("OAuth callback request was incomplete", kind: .callback)
     }
     request.append(contentsOf: buffer[..<count])
     if request.range(of: Data("\r\n\r\n".utf8)) != nil {
       guard let text = String(data: request, encoding: .utf8) else {
-        throw GatewayAuthError("OAuth callback request was malformed")
+        throw GatewayAuthError("OAuth callback request was malformed", kind: .callback)
       }
       return text
     }
   }
-  throw GatewayAuthError("OAuth callback request was too large")
+  throw GatewayAuthError("OAuth callback request was too large", kind: .callback)
 }

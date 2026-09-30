@@ -43,7 +43,12 @@ public struct GatewayAuthBootstrap: Sendable {
   ) throws -> GatewayPreparation {
     if product == .service, arguments.prefix(2) == ["clients", "register"] {
       if arguments.contains("--help") {
-        return .handled("Usage: clients register --file ABSOLUTE_PATH [--product calendar|gmail|docs|sheets|drive|analytics|marketing|ocr|service] [--redirect-uri URI] [--listen-host ADDRESS] [--listen-port PORT] [--replace]\nImports an existing Google OAuth client locally; does not create a Google Cloud OAuth client.")
+        return .handled("""
+          Usage: clients register --file ABSOLUTE_PATH
+            [--product calendar|gmail|docs|sheets|drive|analytics|marketing|ocr|service]
+            [--redirect-uri URI] [--listen-host ADDRESS] [--listen-port PORT] [--replace]
+          Imports an existing Google OAuth client locally; does not create a Google Cloud OAuth client.
+          """)
       }
       return .handled(try OAuthClientRegistration.run(arguments: arguments, environment: environment))
     }
@@ -56,6 +61,9 @@ public struct GatewayAuthBootstrap: Sendable {
     }
     let options = try ProviderOptions(arguments: arguments)
     let auth = arguments.count >= 2 && ["auth", "oauth"].contains(arguments[0])
+    if auth, arguments[1] == "login", OAuthCallbackSettings.isConfigured(prefix: product.prefix, environment: environment) {
+      _ = try OAuthCallbackSettings(prefix: product.prefix, environment: environment)
+    }
     if let provider = options.provider {
       guard auth, arguments[1] == "login", provider == "gcloud" else {
         throw GatewayAuthError("--provider gcloud is supported on auth login only")
@@ -161,6 +169,7 @@ private struct ProviderOptions {
   var timeout: TimeInterval = 300
 
   init(arguments: [String]) throws {
+    let usesProvider = arguments.contains { $0 == "--provider" || $0.hasPrefix("--provider=") }
     var index = 0
     while index < arguments.count {
       let argument = arguments[index]
@@ -187,8 +196,10 @@ private struct ProviderOptions {
         case "--product": serviceProduct = value
         case "--scope": scopes.append(value)
         case "--timeout":
-          guard let number = Double(value), number >= 1, number <= 600 else { throw GatewayAuthError("--timeout must be between 1 and 600 seconds") }
-          timeout = number
+          if usesProvider {
+            guard let number = Double(value), number >= 1, number <= 600 else { throw GatewayAuthError("--timeout must be between 1 and 600 seconds") }
+            timeout = number
+          }
         default: break
         }
       } else if name == "--no-open" { noOpen = true }

@@ -88,8 +88,10 @@ public enum GatewayAuthProduct: String, CaseIterable, Sendable {
 }
 
 public struct GatewayAuthError: Error, CustomStringConvertible, Sendable {
+  public enum Kind: Sendable { case configuration, timeout, callback, transport }
   public let description: String
-  public init(_ description: String) { self.description = description }
+  public let kind: Kind
+  public init(_ description: String, kind: Kind = .configuration) { self.description = description; self.kind = kind }
 }
 
 public struct GatewayInvocation: Sendable {
