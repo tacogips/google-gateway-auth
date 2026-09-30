@@ -78,9 +78,32 @@ private func withEnvironment(_ operation: ([String: String]) throws -> Void) thr
     #expect(prepared.environment["GOOGLE_CALENDAR_GATEWAY_OAUTH_CLIENT_PATH"] == url.path)
     _ = try auth.prepare(arguments: ["auth", "login", "--provider=gcloud"], environment: environment, product: .calendar, role: "reader")
     #expect(runner.calls[0].arguments.contains { $0.hasPrefix("--client-id-file=") })
-    #expect(runner.calls[0].arguments.contains("--scopes=https://www.googleapis.com/auth/calendar.readonly"))
+    #expect(runner.calls[0].arguments.contains("--scopes=https://www.googleapis.com/auth/calendar.events.readonly,https://www.googleapis.com/auth/calendar.calendarlist.readonly,https://www.googleapis.com/auth/calendar.freebusy,https://www.googleapis.com/auth/cloud-platform"))
     #expect(!runner.calls[0].arguments.contains { $0.contains("test-client-secret") })
   }
+}
+
+@Test(arguments: GatewayAuthProduct.allCases)
+func everyProviderRequestsGcloudRequiredCloudScope(product: GatewayAuthProduct) throws {
+  try withEnvironment { base in
+    var environment = base
+    environment[product.prefix + "OAUTH_CLIENT_JSON"] = #"{"installed":{"client_id":"fixture-client.apps.googleusercontent.com","client_secret":"fixture-secret"}}"#
+    let runner = RecordingGcloud()
+    _ = try GatewayAuthBootstrap(runner: runner).prepare(arguments: ["auth", "login", "--provider", "gcloud"], environment: environment, product: product, role: "reader")
+    let argument = try #require(runner.calls.first?.arguments.first(where: { $0.hasPrefix("--scopes=") }))
+    let requested = argument.dropFirst("--scopes=".count).split(separator: ",").map(String.init)
+    let cloud = "https://www.googleapis.com/auth/cloud-platform"
+    #expect(requested.filter { $0 == cloud }.count == 1)
+    #expect(Set(product.scopes(role: "reader")).isSubset(of: Set(requested)))
+    #expect(runner.calls[0].arguments.contains(where: { $0.hasPrefix("--client-id-file=") }) == product.requiresCustomClient)
+  }
+}
+
+@Test func workspaceProviderRoleScopesMatchNativeBoundaries() {
+  #expect(GatewayAuthProduct.drive.scopes(role: "writer") == ["https://www.googleapis.com/auth/drive.file"])
+  #expect(GatewayAuthProduct.calendar.scopes(role: "reader").contains("https://www.googleapis.com/auth/calendar.events.readonly"))
+  #expect(!GatewayAuthProduct.calendar.scopes(role: "writer").contains("https://www.googleapis.com/auth/calendar.readonly"))
+  #expect(GatewayAuthProduct.gmail.scopes(role: "threads").contains("https://www.googleapis.com/auth/gmail.insert"))
 }
 
 @Test func failedLoginDoesNotSelectProvider() throws {

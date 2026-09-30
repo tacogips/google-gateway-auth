@@ -5,6 +5,10 @@ Shared Swift CLI authentication integration for tacogips Google gateways.
 - `auth login --provider gcloud` delegates consent and credential storage to
   gcloud application-default authentication, using a private product/role/profile
   configuration directory. The Cloud Service roles share one Cloud profile.
+- Gcloud ADC additionally requires `cloud-platform` for every provider login,
+  including custom Workspace clients. Provider grants therefore include that
+  Cloud scope alongside the selected role scopes. Native login requests the
+  gateway role scopes without the gcloud requirement.
 - Subsequent commands obtain fresh access tokens without printing credentials.
 - Explicit external token, JSON, and file inputs retain precedence.
 - Provider-free login delegates to the gateway's native browser flow. A private

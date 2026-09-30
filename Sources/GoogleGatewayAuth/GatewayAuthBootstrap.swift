@@ -78,7 +78,10 @@ public struct GatewayAuthBootstrap: Sendable {
     if let path = prepared[product.prefix + "GCLOUD_PATH"] { prepared["GOOGLE_GATEWAY_GCLOUD_PATH"] = path }
     if options.provider == "gcloud" {
       try createPrivateDirectory(directory)
-      let scopes = options.scopes.isEmpty ? try product.scopes(role: role, serviceProduct: options.serviceProduct) : options.scopes
+      var scopes = options.scopes.isEmpty ? try product.scopes(role: role, serviceProduct: options.serviceProduct) : options.scopes
+      // Gcloud ADC requires this scope even with a custom Workspace client.
+      let cloudScope = "https://www.googleapis.com/auth/cloud-platform"
+      if !scopes.contains(cloudScope) { scopes.append(cloudScope) }
       guard scopes.allSatisfy({ $0.hasPrefix("https://") || ["openid", "email", "profile"].contains($0) }) else {
         throw GatewayAuthError("--scope must be an OAuth scope URI or an identity scope")
       }

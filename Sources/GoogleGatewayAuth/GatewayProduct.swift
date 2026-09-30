@@ -35,17 +35,18 @@ public enum GatewayAuthProduct: String, CaseIterable, Sendable {
     let read = role == "reader"
     let names: [String]
     switch self {
-    case .calendar: names = read ? ["calendar.readonly"] : ["calendar.readonly", "calendar.events"]
+    case .calendar:
+      names = [read ? "calendar.events.readonly" : "calendar.events", "calendar.calendarlist.readonly", "calendar.freebusy"]
     case .gmail:
       switch role {
       case "reader": names = ["gmail.readonly"]
-      case "threads": names = ["gmail.readonly", "gmail.modify"]
+      case "threads": names = ["gmail.readonly", "gmail.modify", "gmail.insert"]
       case "message-box": return ["https://mail.google.com/"]
-      default: names = ["gmail.readonly", "gmail.send", "gmail.compose"]
+      default: names = ["gmail.readonly", "gmail.compose", "gmail.send"]
       }
     case .docs: names = read ? ["documents.readonly"] : ["documents"]
     case .sheets: names = read ? ["spreadsheets.readonly"] : ["spreadsheets"]
-    case .drive: names = read ? ["drive.readonly"] : ["drive"]
+    case .drive: names = read ? ["drive.readonly"] : ["drive.file"]
     case .analytics:
       if read { names = ["analytics.readonly", "tagmanager.readonly"] } else if role == "admin" {
         names = ["analytics", "analytics.edit", "analytics.readonly", "analytics.manage.users",
