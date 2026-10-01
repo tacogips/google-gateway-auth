@@ -113,10 +113,7 @@ func defaultClientEnvironment(_ environment: [String: String], product: GatewayA
     (key.hasPrefix(product.prefix) || key.hasPrefix("GOOGLE_DOCUMENTS_GATEWAY_")) && key.contains("OAUTH_CLIENT")
   }
   guard !existing else { return result }
-  let config = try environment["XDG_CONFIG_HOME"] ?? homeDirectory(environment) + "/.config"
-  guard config.hasPrefix("/") else { throw GatewayAuthError("XDG_CONFIG_HOME must be an absolute path") }
-  let url = URL(fileURLWithPath: config).appendingPathComponent(product.directory).appendingPathComponent("oauth-client.json")
-  if FileManager.default.fileExists(atPath: url.path) {
+  if let url = try defaultConfigurationURL(environment: environment, product: product, filename: "oauth-client.json") {
     _ = try privateRead(url)
     result[prefix + "OAUTH_CLIENT_PATH"] = url.path
   }

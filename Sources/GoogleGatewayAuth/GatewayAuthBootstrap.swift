@@ -47,6 +47,7 @@ public struct GatewayAuthBootstrap: Sendable {
           Usage: clients register --file ABSOLUTE_PATH
             [--product calendar|gmail|docs|sheets|drive|analytics|marketing|ocr|service]
             [--redirect-uri URI] [--listen-host ADDRESS] [--listen-port PORT] [--replace]
+          Defaults to the shared Service client for all gateways; --product installs an override.
           Imports an existing Google OAuth client locally; does not create a Google Cloud OAuth client.
           """)
       }

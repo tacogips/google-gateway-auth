@@ -72,7 +72,7 @@ public struct OAuthCallbackSettings: Sendable {
 
   private static func configurationURL(prefix: String, environment: [String: String]) -> URL? {
     guard let product = GatewayAuthProduct.allCases.first(where: { $0.prefix == prefix }),
-      let directory = try? configDirectory(environment: environment, product: product) else { return nil }
-    return directory.appendingPathComponent("oauth-callback.json")
+      let url = try? defaultConfigurationURL(environment: environment, product: product, filename: "oauth-callback.json") else { return nil }
+    return url
   }
 }

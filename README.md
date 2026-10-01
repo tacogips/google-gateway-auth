@@ -12,8 +12,9 @@ Shared Swift CLI authentication integration for tacogips Google gateways.
 - Subsequent commands obtain fresh access tokens without printing credentials.
 - Explicit external token, JSON, and file inputs retain precedence.
 - Provider-free login delegates to the gateway's native browser flow. A private
-  maintainer-installed `~/.config/<product-directory>/oauth-client.json` supplies
-  its default Desktop client. A successful native login clears the selected
+  Service-configured `~/.config/google-service-gateway/oauth-client.json` supplies
+  the shared default client. Product-specific client files and explicit environment
+  inputs take precedence. A successful native login clears the selected
   gcloud provider; failures preserve it.
 - `<PRODUCT_PREFIX>GCLOUD_PATH` accepts an absolute gcloud executable path.
 - Marketing supports `--product` selection and product-specific scopes.
@@ -53,7 +54,9 @@ registered callback URI; Desktop clients use HTTP loopback callbacks.
 Service CLI composition roots handle `clients register --file ABSOLUTE_PATH
 --product PRODUCT [--redirect-uri URI] [--listen-host ADDRESS] [--listen-port
 PORT] [--replace]`. This privately imports an existing Google client and callback
-settings for that product. It does not create a client in Google Cloud. Existing
+settings for that product. Omit `--product` to configure the shared Service default
+for every gateway. Product client overrides keep their own callback settings;
+otherwise callback settings also fall back to Service. It does not create a client in Google Cloud. Existing
 configuration requires `--replace`. Environment values override stored settings.
 
 The callback listener validates path, state and duplicate query parameters, has

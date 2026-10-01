@@ -69,3 +69,25 @@ func configDirectory(environment: [String: String], product: GatewayAuthProduct)
   guard config.hasPrefix("/") else { throw GatewayAuthError("XDG_CONFIG_HOME must be an absolute path") }
   return URL(fileURLWithPath: config).appendingPathComponent(product.directory)
 }
+
+/// Product overrides take precedence over the shared Service configuration.
+func defaultConfigurationURL(environment: [String: String], product: GatewayAuthProduct, filename: String) throws -> URL? {
+  var products: [GatewayAuthProduct] = product == .service ? [.service] : [product, .service]
+  if filename == "oauth-callback.json", product != .service {
+    let sharedClient = try configDirectory(environment: environment, product: .service).appendingPathComponent("oauth-client.json").path
+    let explicitClient = environment.contains { key, value in
+      key.hasPrefix(product.prefix) && key.contains("OAUTH_CLIENT")
+        && (key.hasSuffix("JSON") || key.hasSuffix("PATH") && value != sharedClient)
+    }
+    if explicitClient { products = [product] }
+  }
+  for candidate in products {
+    let url = try configDirectory(environment: environment, product: candidate).appendingPathComponent(filename)
+    if FileManager.default.fileExists(atPath: url.path) { return url }
+    // A deliberately configured product client must not inherit another client's callback.
+    if filename == "oauth-callback.json", candidate == product,
+      FileManager.default.fileExists(atPath: try configDirectory(environment: environment, product: product)
+        .appendingPathComponent("oauth-client.json").path) { return nil }
+  }
+  return nil
+}

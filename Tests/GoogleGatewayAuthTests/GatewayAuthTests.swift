@@ -222,7 +222,6 @@ func everyProviderRequestsGcloudRequiredCloudScope(product: GatewayAuthProduct) 
   }
 }
 
-
 @Test func revokePreservesExistingExplicitSelectionAndConfirmationChecks() throws {
   try withEnvironment { environment in
     var configured = environment
