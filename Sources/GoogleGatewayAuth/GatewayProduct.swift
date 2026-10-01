@@ -98,19 +98,22 @@ public struct GatewayAuthError: Error, CustomStringConvertible, Sendable {
 public struct GatewayInvocation: Sendable {
   public let arguments: [String]
   public let environment: [String: String]
-  let obsoleteBinding: URL?
+  let obsoleteFiles: [URL]
 
-  init(arguments: [String], environment: [String: String], obsoleteBinding: URL? = nil) {
-    self.arguments = arguments; self.environment = environment; self.obsoleteBinding = obsoleteBinding
+  init(arguments: [String], environment: [String: String], obsoleteBinding: URL? = nil, obsoleteFiles: [URL] = []) {
+    self.arguments = arguments; self.environment = environment
+    self.obsoleteFiles = obsoleteFiles + (obsoleteBinding.map { [$0] } ?? [])
   }
 
   /// Switches away from a selected gcloud provider only after native login has
   /// completed successfully. A failed or cancelled native login preserves it.
   public func complete(exitCode: Int32) -> Int32 {
-    guard exitCode == 0, let obsoleteBinding else { return exitCode }
+    guard exitCode == 0, !obsoleteFiles.isEmpty else { return exitCode }
     do {
-      _ = try privateRead(obsoleteBinding)
-      try FileManager.default.removeItem(at: obsoleteBinding)
+      for url in obsoleteFiles where FileManager.default.fileExists(atPath: url.path) {
+        _ = try privateRead(url)
+        try FileManager.default.removeItem(at: url)
+      }
       return exitCode
     } catch {
       FileHandle.standardError.write(Data("Could not clear previous auth provider selection\n".utf8))

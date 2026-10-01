@@ -105,6 +105,10 @@ public struct GatewayAuthBootstrap: Sendable {
       try privateWrite(JSONEncoder().encode(ProviderBinding(provider: "gcloud", scopes: scopes)), to: bindingURL)
       return .handled(try metadata(product: product, role: role, profile: profile, state: "READY"))
     }
+    if auth, arguments[1] == "logout" {
+      let adc = directory.appendingPathComponent("gcloud/application_default_credentials.json")
+      return .invoke(.init(arguments: arguments, environment: prepared, obsoleteFiles: [adc, bindingURL]))
+    }
     // Explicit external sources retain precedence, including invalid/conflicting
     // sources which the native resolver must reject rather than hide.
     let external = hasExternalCredential(environment: environment, product: product, profile: profile)

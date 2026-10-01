@@ -234,3 +234,25 @@ func everyProviderRequestsGcloudRequiredCloudScope(product: GatewayAuthProduct) 
     #expect(runner.calls.count == 2)
   }
 }
+
+@Test func logoutClearsOnlyIsolatedProviderAfterNativeSuccess() throws {
+  try withEnvironment { environment in
+    let runner = RecordingGcloud()
+    let auth = GatewayAuthBootstrap(runner: runner)
+    _ = try auth.prepare(arguments: ["auth", "login", "--provider", "gcloud"], environment: environment, product: .service, role: "reader")
+    let directory = try providerDirectory(environment: environment, product: .service, role: "reader", profile: "google-personal")
+    let adc = directory.appendingPathComponent("gcloud/application_default_credentials.json")
+    try privateWrite(Data("fixture".utf8), to: adc)
+    let binding = directory.appendingPathComponent("provider.json")
+    let result = try auth.prepare(arguments: ["auth", "logout"], environment: environment, product: .service, role: "reader")
+    guard case .invoke(let invocation) = result else { Issue.record("Logout must use native store cleanup"); return }
+    #expect(runner.calls.count == 2)
+    #expect(invocation.complete(exitCode: 4) == 4)
+    #expect(FileManager.default.fileExists(atPath: binding.path))
+    #expect(invocation.complete(exitCode: 0) == 0)
+    #expect(!FileManager.default.fileExists(atPath: adc.path))
+    #expect(!FileManager.default.fileExists(atPath: binding.path))
+    #expect(invocation.complete(exitCode: 0) == 0)
+    #expect(runner.calls.count == 2)
+  }
+}
