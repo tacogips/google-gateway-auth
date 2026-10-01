@@ -67,3 +67,12 @@ func sharedCallbackConfigurationAndEnvironmentOverride(product: GatewayAuthProdu
     }
   }
 }
+
+@Test func emptySharedCallbacksKeepNativeReceiverDefaults() throws {
+  try sharedConfiguration { environment, root in
+    try privateWrite(Data("{}".utf8), to: root.appendingPathComponent("google-service-gateway/oauth-callback.json"))
+    for product in GatewayAuthProduct.allCases {
+      #expect(!OAuthCallbackSettings.isConfigured(prefix: product.prefix, environment: environment))
+    }
+  }
+}

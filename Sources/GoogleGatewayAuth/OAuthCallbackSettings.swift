@@ -8,8 +8,14 @@ public struct OAuthCallbackSettings: Sendable {
   public let callbackPath: String
 
   public static func isConfigured(prefix: String, environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
-    ["OAUTH_REDIRECT_URI", "OAUTH_LISTEN_HOST", "OAUTH_LISTEN_PORT"].contains { environment[prefix + $0] != nil }
-      || configurationURL(prefix: prefix, environment: environment).map { FileManager.default.fileExists(atPath: $0.path) } == true
+    if ["OAUTH_REDIRECT_URI", "OAUTH_LISTEN_HOST", "OAUTH_LISTEN_PORT"].contains(where: { environment[prefix + $0] != nil }) {
+      return true
+    }
+    guard let url = configurationURL(prefix: prefix, environment: environment), FileManager.default.fileExists(atPath: url.path) else { return false }
+    // Empty imported settings keep the gateway's normal receiver defaults.
+    // Invalid configuration remains configured so initialization reports it.
+    guard let data = try? privateRead(url), let stored = try? JSONDecoder().decode([String: String].self, from: data) else { return true }
+    return !stored.isEmpty
   }
 
   public init(prefix: String, defaultPath: String = "/oauth/callback", requestedURI: String? = nil,
