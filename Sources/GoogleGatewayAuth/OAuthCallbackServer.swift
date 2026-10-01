@@ -120,17 +120,7 @@ private func parseCallback(connection: Int32, deadline: TimeInterval, expectedSt
   guard components.path == callbackPath else {
     throw GatewayAuthError("OAuth callback path was invalid", kind: .callback)
   }
-  var query: [String: String] = [:]
-  for item in components.queryItems ?? [] {
-    guard query[item.name] == nil else {
-      throw GatewayAuthError("OAuth callback contained duplicate parameters", kind: .callback)
-    }
-    query[item.name] = item.value ?? ""
-  }
-  guard query["state"] == expectedState, (query["error"] == nil) != (query["code"] == nil), !(query["code"] ?? query["error"] ?? "").isEmpty else {
-    throw GatewayAuthError("OAuth callback state or code is invalid", kind: .callback)
-  }
-  return OAuthCallback(code: query["code"], state: query["state"], error: query["error"])
+  return try OAuthCallback.validated(queryItems: components.queryItems ?? [], expectedState: expectedState)
 }
 
 private func sendCallbackResponse(connection: Int32, accepted: Bool) {
